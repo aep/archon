@@ -1,14 +1,16 @@
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::io::{Read, Seek, BufReader};
-use std::fs::File;
 use sha2::{Sha512, Digest};
 use std::io::SeekFrom;
 use readchain::{Take,Chain};
-use std;
+use std::path::Path;
 use hex::{ToHex, FromHex};
+use std::fs::{File, create_dir_all};
+use std::io::{Write};
 
 pub struct BlockStore {
+    pub path:   String,
     pub blocks: HashMap<Vec<u8>, Block>,
 }
 
@@ -25,10 +27,13 @@ pub struct BlockShard {
     pub size:    usize,
 }
 
-pub fn new() -> BlockStore {
-    BlockStore{
+pub fn new(path: String) -> BlockStore {
+    let mut bs = BlockStore{
+        path: path,
         blocks: HashMap::new(),
-    }
+    };
+    bs.load();
+    bs
 }
 
 
@@ -85,16 +90,42 @@ impl BlockStore {
             }
             return false;
         }
-        self.blocks.insert(hash, block);
+
+        //TODO sometimes we want to store the original block rather than saving it to disk
+        //the current interface will be weird later
+
+        let hs = hash.to_hex();
+        let mut p = Path::new(&self.path).join(&hs[0..2]);
+        create_dir_all(&p).unwrap();
+        p = p.join(&hs[2..]);
+        if p.exists() {
+            //TODO collision check?
+        } else {
+            //TODO: write to tempfile then move to avoid half written entries
+            let mut f = File::create(&p).unwrap();
+            ::std::io::copy(&mut block.chain(), &mut f);
+        }
+
+        self.blocks.insert(hash, Block{
+            size: block.size,
+            shards: vec![
+                BlockShard {
+                    file:    OsString::from(p.to_str().unwrap()),
+                    offset:  0,
+                    size:    block.size,
+                }
+            ]
+        });
+
         return true;
     }
 
-    pub fn load(&mut self, path: &std::path::Path) {
-        println!("loading content from {:?}", path);
-        let entry_set = std::fs::read_dir(path).unwrap();
+    fn load(&mut self) {
+        println!("loading content from {}", self.path);
+        let entry_set = ::std::fs::read_dir(&self.path).unwrap();
         for entry in entry_set {
             let entry = entry.unwrap();
-            let entry_set2 = std::fs::read_dir(entry.path()).unwrap();
+            let entry_set2 = ::std::fs::read_dir(entry.path()).unwrap();
             for entry2 in entry_set2 {
                 let entry2 = entry2.unwrap();
                 let hash = entry.file_name().to_string_lossy().into_owned() + &entry2.file_name().to_string_lossy().into_owned();
@@ -112,7 +143,6 @@ impl BlockStore {
             }
         }
     }
-
 }
 
 impl Block {

@@ -20,6 +20,7 @@ mod serializer;
 mod index;
 mod blockstore;
 mod readchain;
+mod chunker;
 
 use std::ffi::OsString;
 use clap::{Arg, App, SubCommand, AppSettings};
@@ -27,8 +28,6 @@ use std::fs::{File, create_dir_all};
 use std::path::Path;
 use url::{Url, ParseError};
 use hex::ToHex;
-
-use std::io::{Write};
 
 fn main() {
 
@@ -108,33 +107,24 @@ fn main() {
             let target_path = Path::new(target_url.path());
             let store_path = target_path.parent().unwrap();
 
-            let mut bs = blockstore::new();
             let bsp = store_path.join("content");
             if !bsp.exists() {
                 println!("{:?} doesn't look like a content store. maybe you want to run store init?", target_path);
                 std::process::exit(10);
             }
-            bs.load(&bsp);
-            let mut hi = index::from_host(OsString::from(root_path));
-            hi.serialize_to_blocks(&mut bs);
+            let mut bs = blockstore::new(bsp.to_str().unwrap().to_owned());
 
-            for (hs, block) in &bs.blocks {
-                let hs = hs.to_hex();
-                let mut p = bsp.join(&hs[0..2]);
-                create_dir_all(&p).unwrap();
-                p = p.join(&hs[2..]);
-                if p.exists() {
-                    //TODO double check shasum
-                } else {
-                    let mut f = File::create(&p).unwrap();
-                    std::io::copy(&mut block.chain(), &mut f);
-                    f.flush();
+            let mut hi = index::from_host(OsString::from(root_path));
+
+            hi.store_inodes(&mut bs);
+
+            loop {
+                hi = hi.store_index(&mut bs);
+                if hi.c.as_ref().unwrap().len() == 1 {
+                    break;
                 }
             }
-
-            let mut hi2 = index::from_index(&hi);
-
-
+            println!("input stored into index {}", hi.c.as_ref().unwrap().first().unwrap().h.to_hex())
         },
         _ => unreachable!()
     }

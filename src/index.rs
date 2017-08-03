@@ -1,12 +1,8 @@
-use std::collections::HashMap;
 use std;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde::ser::{SerializeStruct};
-use tempfile::tempfile;
 use std::io::{Write,Seek, SeekFrom};
 use std::fs::File;
-use tempfile;
-use rmps;
+use std::collections::{HashMap, BTreeMap};
+use serde::{Serialize, Serializer};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Inode {
@@ -16,12 +12,28 @@ pub struct Inode {
     pub k: u16,     //kind
     pub a: u16,     //perms
 
+    #[serde(serialize_with = "ordered_map")]
     pub d: Option<HashMap<String, ContentDirEntry>>, //directory
     pub h: Option<String>, //file hash
     pub c: Option<Vec<ContentBlockEntry>>, //content blocks
 
     #[serde(skip)]
     pub host_path: std::ffi::OsString, // full path. will not be stored
+}
+
+fn ordered_map<S>(value: &Option<HashMap<String, ContentDirEntry>>, serializer: S) -> Result<S::Ok, S::Error>
+where S: Serializer
+{
+    match *value {
+        Some(ref val) => {
+            let ordered: BTreeMap<_, _> = val.iter().collect();
+            ordered.serialize(serializer)
+        },
+        None => {
+            let fake : Option<HashMap<String, ContentDirEntry>> = None;
+            fake.serialize(serializer)
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -140,18 +152,3 @@ pub fn from_host(host: std::ffi::OsString) -> Index{
     index
 }
 
-pub fn from_index(i: &Index) -> Index{
-
-    let mut tmpindex: File = tempfile::tempfile().unwrap();
-    i.serialize(&mut rmps::Serializer::new(&mut tmpindex)).unwrap();
-    tmpindex.seek(SeekFrom::Start(0)).unwrap();
-
-
-
-    let mut index = Index{
-        v: 1,
-        i: Vec::new(),
-        c: None,
-    };
-    index
-}
