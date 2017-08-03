@@ -6,7 +6,7 @@ use sha2::{Sha512, Digest};
 use std::io::SeekFrom;
 use readchain::{Take,Chain};
 use std;
-use hex::FromHex;
+use hex::{ToHex, FromHex};
 
 pub struct BlockStore {
     pub blocks: HashMap<Vec<u8>, Block>,
@@ -58,7 +58,7 @@ impl BlockStore {
                     panic!("BUG: in chainreader: hash from read_to_end doesn't match digest_reader");
                 }
 
-                panic!(format!("BUG: inserted block hash id doesn't match its content. expected {:?} got {:?}", hash, hs));
+                panic!(format!("BUG: inserted block hash id doesn't match its content. expected {} got {}", hash.to_hex(), hs.to_hex()));
             }
         }
 
@@ -75,7 +75,7 @@ impl BlockStore {
                 if a[..] != b[..] {
                     println!("!!!!!! HASH COLLISION !!!!!!!!!!!!!!!!!!!!!");
                     println!("this is extremly unlikely and might be a bug, save your block store for research.");
-                    println!("{:?}", hash);
+                    println!("{}", hash.to_hex());
                     panic!("hash collision");
                 }
 
@@ -83,10 +83,10 @@ impl BlockStore {
                     break;
                 }
             }
-            return true;
+            return false;
         }
         self.blocks.insert(hash, block);
-        return false;
+        return true;
     }
 
     pub fn load(&mut self, path: &std::path::Path) {

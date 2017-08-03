@@ -13,21 +13,22 @@ extern crate clap;
 extern crate url;
 extern crate generic_array;
 extern crate hex;
+extern crate tempfile;
 
 mod fs;
 mod serializer;
 mod index;
 mod blockstore;
 mod readchain;
-mod localstore;
 
 use std::ffi::OsString;
 use clap::{Arg, App, SubCommand, AppSettings};
 use std::fs::{File, create_dir_all};
-use std::io::Write;
 use std::path::Path;
 use url::{Url, ParseError};
 use hex::ToHex;
+
+use std::io::{Write};
 
 fn main() {
 
@@ -131,8 +132,9 @@ fn main() {
                 }
             }
 
-            let mut local = localstore::new(store_path);
-            local.store(&hi, "test", &mut bs);
+            let mut hi2 = index::from_index(&hi);
+
+
         },
         _ => unreachable!()
     }

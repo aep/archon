@@ -59,10 +59,10 @@ impl<'a> Fuse<'a> {
 impl<'a>  Filesystem for Fuse<'a> {
     fn lookup (&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
 
-        let mb = self.index.inodes.get((parent - 1) as usize)
+        let mb = self.index.i.get((parent - 1) as usize)
             .and_then(|entry| entry.d.as_ref())
             .and_then(|d| d.get(&name.to_string_lossy().into_owned()))
-            .and_then(|e| self.index.inodes.get(e.i as usize));
+            .and_then(|e| self.index.i.get(e.i as usize));
 
         match mb {
             None => reply.error(ENOENT),
@@ -76,7 +76,7 @@ impl<'a>  Filesystem for Fuse<'a> {
     fn getattr (&mut self, _req: &Request, ino: u64, reply: ReplyAttr) {
         println!("getattr {:?}", ino);
 
-        match self.index.inodes.get((ino - 1) as usize) {
+        match self.index.i.get((ino - 1) as usize) {
             None => reply.error(ENOENT),
             Some(entry) => {
                 reply.attr(&TTL, &entry_to_file_attr(entry));
@@ -87,7 +87,7 @@ impl<'a>  Filesystem for Fuse<'a> {
 
     fn open(&mut self, _req: &Request, ino: u64, _flags: u32, reply: ReplyOpen) {
         println!("open {:?}", ino);
-        match self.index.inodes.get((ino - 1) as usize) {
+        match self.index.i.get((ino - 1) as usize) {
             None => {reply.error(ENOENT);},
             Some(entry) => {
                 let mut fh = entry.i;
@@ -123,7 +123,7 @@ impl<'a>  Filesystem for Fuse<'a> {
             reply.error(ENOENT);
             return;
         }
-        match self.index.inodes.get((ino - 1) as usize) {
+        match self.index.i.get((ino - 1) as usize) {
             None => reply.error(ENOENT),
             Some(entry) => {
                 reply.add(1, 0, FileType::Directory, "."); //FIXME
@@ -150,7 +150,7 @@ impl<'a>  Filesystem for Fuse<'a> {
 }
 
 impl Inode {
-    fn chain<'a>(&'a self, blockstore: &'a BlockStore) -> Chain<'a, Take<Chain<'a, Take<File>>>> {
+    pub fn chain<'a>(&'a self, blockstore: &'a BlockStore) -> Chain<'a, Take<Chain<'a, Take<File>>>> {
         let c = self.c.as_ref().unwrap();
         let it = c.iter().map(move |c| {
             println!("reading from block {:?} offset  {} limit {}", c.h, c.o, c.l);

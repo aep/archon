@@ -2,6 +2,11 @@ use std::collections::HashMap;
 use std;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::ser::{SerializeStruct};
+use tempfile::tempfile;
+use std::io::{Write,Seek, SeekFrom};
+use std::fs::File;
+use tempfile;
+use rmps;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Inode {
@@ -34,8 +39,9 @@ pub struct ContentDirEntry {
 
 #[derive(Serialize, Deserialize)]
 pub struct Index {
-    pub version: u16,
-    pub inodes:  Vec<Inode>,
+    pub v: u16, //version
+    pub i: Vec<Inode>, //inodes. i or c cannot exist at the same time
+    pub c: Option<Vec<ContentBlockEntry>>, //content blocks that compose another index
 }
 
 fn collect_dir(path: std::ffi::OsString) -> std::io::Result<Vec<std::fs::DirEntry>> {
@@ -48,7 +54,7 @@ fn collect_dir(path: std::ffi::OsString) -> std::io::Result<Vec<std::fs::DirEntr
 impl Index {
     fn add_from_dir_entry(&mut self, parent_inode: u64, path: std::fs::DirEntry) -> (String, ContentDirEntry) {
         let meta = path.metadata().unwrap();
-        let i = (self.inodes.len()) as u64;
+        let i = (self.i.len()) as u64;
 
         let kind = match meta.is_dir() {
             true  => 1,
@@ -69,7 +75,7 @@ impl Index {
             host_path: path.path().into_os_string(),
         };
 
-        self.inodes.push(entry);
+        self.i.push(entry);
 
         (
             path.file_name().to_string_lossy().into_owned(),
@@ -84,7 +90,7 @@ impl Index {
 
         let dirs = collect_dir(path).unwrap();
 
-        let inode_start = self.inodes.len() as u64;
+        let inode_start = self.i.len() as u64;
         let inode_len   = dirs.len() as u64;
 
         // 1 iteration to create all the inodes
@@ -95,12 +101,12 @@ impl Index {
         }
 
         // insert the dirmap into the current parent node
-        self.inodes[parent_inode as usize].d = Some(contentdirmap);
+        self.i[parent_inode as usize].d = Some(contentdirmap);
 
         // 2. iteration to descend into the subdirs
         for x in inode_start..(inode_start+inode_len) {
             let (kind, inode, path) = {
-                let ref e = self.inodes[x as usize];
+                let ref e = self.i[x as usize];
                 (e.k, e.i, e.host_path.clone())
             };
             if kind == 1 {
@@ -112,11 +118,12 @@ impl Index {
 
 pub fn from_host(host: std::ffi::OsString) -> Index{
     let mut index = Index{
-        version: 1,
-        inodes:  Vec::new(),
+        v: 1,
+        i: Vec::new(),
+        c: None,
     };
 
-    index.inodes.push(Inode{
+    index.i.push(Inode{
         i: 0,
         p: 0,
         s: 0,
@@ -130,5 +137,21 @@ pub fn from_host(host: std::ffi::OsString) -> Index{
         host_path: host.clone(),
     });
     index.descend(0, host);
+    index
+}
+
+pub fn from_index(i: &Index) -> Index{
+
+    let mut tmpindex: File = tempfile::tempfile().unwrap();
+    i.serialize(&mut rmps::Serializer::new(&mut tmpindex)).unwrap();
+    tmpindex.seek(SeekFrom::Start(0)).unwrap();
+
+
+
+    let mut index = Index{
+        v: 1,
+        i: Vec::new(),
+        c: None,
+    };
     index
 }
