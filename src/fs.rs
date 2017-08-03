@@ -153,7 +153,7 @@ impl Inode {
     fn chain<'a>(&'a self, blockstore: &'a BlockStore) -> Chain<'a, Take<Chain<'a, Take<File>>>> {
         let c = self.c.as_ref().unwrap();
         let it = c.iter().map(move |c| {
-            println!("reading from block {} offset  {} limit {}", c.h, c.o, c.l);
+            println!("reading from block {:?} offset  {} limit {}", c.h, c.o, c.l);
 
             let block = blockstore.get(&c.h).expect("block not found");
             let mut re = block.chain();

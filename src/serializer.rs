@@ -28,7 +28,7 @@ fn print_progress_bar(bar: &mut ProgressBar<Stdout>, path: &OsString){
 }
 
 impl Index {
-    fn emit_block(&mut self, blockstore: &mut BlockStore, len: usize, hash: String, inodes: &Vec<IntermediateBlockRef>) -> bool{
+    fn emit_block(&mut self, blockstore: &mut BlockStore, len: usize, hash: Vec<u8>, inodes: &Vec<IntermediateBlockRef>) -> bool{
 
         let mut block_shards = Vec::new();
         //println!("block {}", hash);
@@ -57,7 +57,7 @@ impl Index {
         })
     }
 
-    pub fn serialize(&mut self, blockstore: &mut BlockStore) {
+    pub fn serialize_to_blocks(&mut self, blockstore: &mut BlockStore) {
         let mut bar = ProgressBar::new(self.inodes.len() as u64);
         bar.show_speed = false;
         bar.show_time_left = false;
@@ -106,7 +106,7 @@ impl Index {
                         current_files_in_block.last_mut().as_mut().unwrap().file_end = current_file_pos;
 
                         hasher.input(&buf[restart..restart+count]);
-                        let hash = format!("{:x}", hasher.result());
+                        let hash = hasher.result().as_slice().to_vec();
                         hasher  = Sha512::default();
 
                         total_blocks +=1;
@@ -134,7 +134,7 @@ impl Index {
             current_files_in_block.last_mut().as_mut().unwrap().file_end = current_file_pos;
             current_file_pos = 0;
         }
-        let hash = format!("{:x}", hasher.result());
+        let hash = hasher.result().as_slice().to_vec();
         total_blocks += 1;
         if !self.emit_block(blockstore, current_block_len, hash, &current_files_in_block) {
             new_blocks += 1;

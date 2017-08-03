@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::ser::{SerializeStruct};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Inode {
@@ -19,7 +21,7 @@ pub struct Inode {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ContentBlockEntry {
-    pub h: String,  //block hash
+    pub h: Vec<u8>,  //block hash
     pub o: u64,     //offset into block
     pub l: u64,     //length into block
 }
@@ -32,6 +34,7 @@ pub struct ContentDirEntry {
 
 #[derive(Serialize, Deserialize)]
 pub struct Index {
+    pub version: u16,
     pub inodes:  Vec<Inode>,
 }
 
@@ -109,6 +112,7 @@ impl Index {
 
 pub fn from_host(host: std::ffi::OsString) -> Index{
     let mut index = Index{
+        version: 1,
         inodes:  Vec::new(),
     };
 
@@ -128,4 +132,3 @@ pub fn from_host(host: std::ffi::OsString) -> Index{
     index.descend(0, host);
     index
 }
-
