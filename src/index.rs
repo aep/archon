@@ -1,8 +1,5 @@
-use std;
-use std::io::{Write,Seek, SeekFrom};
-use std::fs::File;
-use std::collections::{HashMap, BTreeMap};
 use serde::{Serialize, Serializer};
+use std::collections::{HashMap, BTreeMap};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Inode {
@@ -18,7 +15,7 @@ pub struct Inode {
     pub c: Option<Vec<ContentBlockEntry>>, //content blocks
 
     #[serde(skip)]
-    pub host_path: std::ffi::OsString, // full path. will not be stored
+    pub host_path: ::std::ffi::OsString, // full path. will not be stored
 }
 
 fn ordered_map<S>(value: &Option<HashMap<String, ContentDirEntry>>, serializer: S) -> Result<S::Ok, S::Error>
@@ -56,15 +53,15 @@ pub struct Index {
     pub c: Option<Vec<ContentBlockEntry>>, //content blocks that compose another index
 }
 
-fn collect_dir(path: std::ffi::OsString) -> std::io::Result<Vec<std::fs::DirEntry>> {
-    let entry_set = try!(std::fs::read_dir(path));
+fn collect_dir(path: ::std::ffi::OsString) -> ::std::io::Result<Vec<::std::fs::DirEntry>> {
+    let entry_set = try!(::std::fs::read_dir(path));
     let mut entries = try!(entry_set.collect::<Result<Vec<_>, _>>());
     entries.sort_by(|a, b| a.path().cmp(&b.path()));
     Ok(entries)
 }
 
 impl Index {
-    fn add_from_dir_entry(&mut self, parent_inode: u64, path: std::fs::DirEntry) -> (String, ContentDirEntry) {
+    fn add_from_dir_entry(&mut self, parent_inode: u64, path: ::std::fs::DirEntry) -> (String, ContentDirEntry) {
         let meta = path.metadata().unwrap();
         let i = (self.i.len()) as u64;
 
@@ -98,7 +95,7 @@ impl Index {
         )
     }
 
-    fn descend(&mut self, parent_inode: u64, path: std::ffi::OsString) {
+    fn descend(&mut self, parent_inode: u64, path: ::std::ffi::OsString) {
 
         let dirs = collect_dir(path).unwrap();
 
@@ -128,7 +125,7 @@ impl Index {
     }
 }
 
-pub fn from_host(host: std::ffi::OsString) -> Index{
+pub fn from_host(host: ::std::ffi::OsString) -> Index{
     let mut index = Index{
         v: 1,
         i: Vec::new(),

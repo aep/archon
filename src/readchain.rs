@@ -1,6 +1,6 @@
-use std::iter::Iterator;
-use std::io::{Result, Read, Seek, SeekFrom, Error, ErrorKind};
 use std::cmp;
+use std::io::{Result, Read, Seek, SeekFrom, Error, ErrorKind};
+use std::iter::Iterator;
 
 /// like std::io::Take but with Seek
 pub struct Take<R>  where R: Read {

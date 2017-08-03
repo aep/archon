@@ -1,36 +1,13 @@
-use std::fs::File;
-use std::io::{Read, BufReader};
-use sha2::{Sha512, Digest};
-use index::*;
 use blockstore::{Block, BlockStore, BlockShard};
-use pbr::ProgressBar;
-use std::ffi::OsString;
-use std::io::Stdout;
-use readchain::Chain;
-use hex::ToHex;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde::ser::{SerializeStruct};
-use tempfile::tempfile;
 use chunker::*;
-use std::io::{Seek, SeekFrom};
-
-
-struct IntermediateBlockRef {
-    inode:       u64,
-    file_start:  usize, //where the file was when the block started
-    file_end:    usize, //where the file completed inside the block
-    block_start: usize, //where the block was when the file started
-}
-
-
-fn print_progress_bar(bar: &mut ProgressBar<Stdout>, path: &OsString){
-    let mut s = path.to_str().unwrap();
-    if s.len() > 40 {
-        bar.message(&format!("indexing ..{:38} ", &s[s.len()-38..]));
-    } else {
-        bar.message(&format!("indexing {:40} ", &s));
-    }
-}
+use index::*;
+use pbr::ProgressBar;
+use readchain::{Take,Chain};
+use serde::{Serialize, Deserialize};
+use std::ffi::OsString;
+use std::fs::File;
+use std::io::{Stdout, Seek, SeekFrom, BufReader};
+use std::path::Path;
 
 impl Index {
     pub fn store_inodes(&mut self, blockstore: &mut BlockStore) {
@@ -87,6 +64,7 @@ impl Index {
 
     }
 
+
     pub fn store_index(&mut self, blockstore: &mut BlockStore) -> Index {
         //TODO that's probably shitty, but i can't be bothered to figure out passing an open file
         //to BlockShard right now
@@ -135,5 +113,34 @@ impl Index {
             c: Some(cbrs),
         }
     }
+
+    pub fn load_index(&self, blockstore: &BlockStore) -> Index {
+        let it = self.c.as_ref().unwrap().iter().map(|c| {
+            let block = blockstore.get(&c.h).expect("block not found");
+            let mut re = block.chain();
+            re.seek(SeekFrom::Current(c.o as i64)).unwrap();
+            Take::limit(re, c.l as usize)
+        });
+        let mut f = Chain::new(Box::new(it));
+        Index::deserialize(&mut ::rmps::Deserializer::new(&mut f)).unwrap()
+    }
+
+    pub fn save_to_file(&mut self, path: &Path) {
+        let mut f = File::create(path).unwrap();
+        self.serialize(&mut ::rmps::Serializer::new(&mut f)).unwrap();
+    }
+
+    pub fn load_from_file(path: &Path) -> Index {
+        let mut f = File::open(path).unwrap();
+        Index::deserialize(&mut ::rmps::Deserializer::new(&mut f)).unwrap()
+    }
 }
 
+fn print_progress_bar(bar: &mut ProgressBar<Stdout>, path: &OsString){
+    let s = path.to_str().unwrap();
+    if s.len() > 40 {
+        bar.message(&format!("indexing ..{:38} ", &s[s.len()-38..]));
+    } else {
+        bar.message(&format!("indexing {:40} ", &s));
+    }
+}

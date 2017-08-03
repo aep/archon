@@ -1,13 +1,11 @@
+use hex::{ToHex, FromHex};
+use readchain::{Take,Chain};
+use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 use std::ffi::OsString;
-use std::io::{Read, Seek, BufReader};
-use sha2::{Sha512, Digest};
-use std::io::SeekFrom;
-use readchain::{Take,Chain};
-use std::path::Path;
-use hex::{ToHex, FromHex};
 use std::fs::{File, create_dir_all};
-use std::io::{Write};
+use std::io::{Read, Seek, BufReader, SeekFrom};
+use std::path::Path;
 
 pub struct BlockStore {
     pub path:   String,
@@ -46,7 +44,7 @@ impl BlockStore {
         #[cfg(debug_assertions)]
         {
             let mut br = BufReader::new(block.chain());
-            let hs = Sha512::digest_reader(&mut br).unwrap().as_slice().to_vec();
+            let hs = Sha256::digest_reader(&mut br).unwrap().as_slice().to_vec();
             if hs != hash {
 
                 let mut br = BufReader::new(block.chain());
@@ -58,7 +56,7 @@ impl BlockStore {
                 }
 
 
-                let hs2 = Sha512::digest(&content).as_slice().to_vec();
+                let hs2 = Sha256::digest(&content).as_slice().to_vec();
                 if hs2 != hs2 {
                     panic!("BUG: in chainreader: hash from read_to_end doesn't match digest_reader");
                 }
@@ -103,7 +101,7 @@ impl BlockStore {
         } else {
             //TODO: write to tempfile then move to avoid half written entries
             let mut f = File::create(&p).unwrap();
-            ::std::io::copy(&mut block.chain(), &mut f);
+            ::std::io::copy(&mut block.chain(), &mut f).unwrap();
         }
 
         self.blocks.insert(hash, Block{

@@ -1,5 +1,5 @@
-use std::io::{Read, BufReader};
-use sha2::{Sha512, Digest};
+use std::io::{Read};
+use sha2::{Sha256, Digest};
 
 /// takes an iterator over tuple (Read, I)
 /// and provides an iterator over Chunk{hash, parts<I>}
@@ -14,7 +14,7 @@ pub struct Chunker<'a, R, C, I> where R : Read, C: ::rollsum::Engine {
     chunker: C,
     bits: u32,
 
-    hasher: Sha512,
+    hasher: Sha256,
 
     buf: [u8;4096],
     buflen : usize,
@@ -47,7 +47,7 @@ impl<'a, R, C, I> Chunker<'a, R, C, I> where I: Copy, R: Read, C: ::rollsum::Eng
             chunker: c,
             bits: bits,
 
-            hasher: Sha512::default(),
+            hasher: Sha256::default(),
 
             buf: [0;4096],
             buflen: 0,
@@ -114,7 +114,6 @@ impl<'a, R, C, I> Iterator for Chunker<'a, R, C, I> where I: Copy, R: Read, C: :
                             hash: hash,
                             parts: ::std::mem::replace(&mut self.current_parts, Vec::new()),
                         });
-                        self.bufsincelastblock = self.bufpos;
                     } else {
                         debug_assert!(self.bufsincelastblock == 0 && self.bufpos == 0, "end of iterator with leftover bytes");
                         return None;
@@ -134,7 +133,7 @@ impl<'a, R, C, I> Iterator for Chunker<'a, R, C, I> where I: Copy, R: Read, C: :
                 self.hasher.input(&self.buf[self.bufsincelastblock..self.bufpos]);
 
                 let hash = self.hasher.result().as_slice().to_vec();
-                self.hasher = Sha512::default();
+                self.hasher = Sha256::default();
 
                 self.current_parts.last_mut().as_mut().unwrap().file_end = self.current_file_pos;
                 let rr = Chunk{
@@ -155,7 +154,6 @@ impl<'a, R, C, I> Iterator for Chunker<'a, R, C, I> where I: Copy, R: Read, C: :
                 return Some(rr);
             }
         }
-        None
     }
 }
 
