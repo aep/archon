@@ -9,12 +9,30 @@ use std::fs::File;
 use std::io::{Stdout, Seek, SeekFrom, BufReader};
 use std::path::Path;
 
+macro_rules! kb_fmt {
+    ($n: ident) => {{
+        let kb = 1024f64;
+        match $n as f64{
+            $n if $n >= kb.powf(4_f64) => format!("{:.*} TB", 2, $n / kb.powf(4_f64)),
+            $n if $n >= kb.powf(3_f64) => format!("{:.*} GB", 2, $n / kb.powf(3_f64)),
+            $n if $n >= kb.powf(2_f64) => format!("{:.*} MB", 2, $n / kb.powf(2_f64)),
+            $n if $n >= kb => format!("{:.*} KB", 2, $n / kb),
+            _ => format!("{:.*} B", 0, $n)
+        }
+    }}
+}
+
 impl Index {
     pub fn store_inodes(&mut self, blockstore: &mut BlockStore) {
 
-        let mut bar = ProgressBar::new(self.i.len() as u64);
-        let mut total_blocks = 0;
+        let total_bytes = self.i.iter().fold(0, |acc, ref x| acc + x.s);
+
+        let mut bar = ProgressBar::new(total_bytes);
+        bar.set_units(::pbr::Units::Bytes);
+
+        let mut new_bytes  = 0;
         let mut new_blocks = 0;
+        let mut total_blocks = 0;
 
         let inodes = self.i.to_vec(); //TODO: only need to do this because borrow bla
 
@@ -24,6 +42,7 @@ impl Index {
 
         let mut ci = Chunker::new(Box::new(it), ::rollsum::Bup::new(), 12);
         while let Some(c) = ci.next() {
+            bar.add((c.len) as u64);
 
             let mut block_shards = Vec::new();
             //println!("block {}", c.hash.to_hex());
@@ -45,29 +64,27 @@ impl Index {
                     o: ibr.block_start as u64,
                     l: (ibr.file_end - ibr.file_start) as u64,
                 });
-
                 print_progress_bar(&mut bar, &self.i[ibr.i as usize].host_path);
-                bar.set(ibr.i);
             }
             if blockstore.insert(c.hash, Block{
                 shards: block_shards,
                 size: c.len,
             }) {
-                new_blocks += 1;
+                new_blocks +=1;
+                new_bytes  += c.len;
             }
             total_blocks += 1;
         }
 
         bar.finish();
-        println!("done serializing {} inodes to {} blocks ({} new)",
-                 self.i.len(), total_blocks, new_blocks);
-
+        println!("done indexing {} inodes to {} blocks", self.i.len(), total_blocks);
+        println!(" + {} blocks {}", new_blocks, kb_fmt!(new_bytes));
     }
 
 
     pub fn store_index(&mut self, blockstore: &mut BlockStore) -> Index {
-        //TODO that's probably shitty, but i can't be bothered to figure out passing an open file
-        //to BlockShard right now
+        //TODO used a namedtempfile isnt great,
+        //but i can't be bothered to figure out passing a &File to BlockShard right now
         let mut tmpindex = ::tempfile::NamedTempFile::new_in(".").unwrap();
         self.serialize(&mut ::rmps::Serializer::new(&mut tmpindex)).unwrap();
         tmpindex.seek(SeekFrom::Start(0)).unwrap();
@@ -138,9 +155,11 @@ impl Index {
 
 fn print_progress_bar(bar: &mut ProgressBar<Stdout>, path: &OsString){
     let s = path.to_str().unwrap();
-    if s.len() > 40 {
-        bar.message(&format!("indexing ..{:38} ", &s[s.len()-38..]));
+    if s.len() > 50 {
+        bar.message(&format!("indexing ..{:48} ", &s[s.len()-48..]));
     } else {
-        bar.message(&format!("indexing {:40} ", &s));
+        bar.message(&format!("indexing {:50} ", &s));
     }
 }
+
+

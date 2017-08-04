@@ -24,11 +24,12 @@ mod serializer;
 
 use clap::{Arg, App, SubCommand, AppSettings};
 use hex::ToHex;
+use std::env;
+use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fs::{create_dir_all};
 use std::path::Path;
 use url::{Url};
-use std::ffi::OsStr;
 
 fn main() {
 
@@ -39,23 +40,17 @@ fn main() {
         .version("1.0")
         .about("content addressable image indexer")
         .subcommand(
-            SubCommand::with_name("pack")
-            .about("write image into .tcxz")
-            .arg(Arg::with_name("root")
+            SubCommand::with_name("rm")
+            .about("remove index from store")
+            .arg(Arg::with_name("name")
                  .required(true)
-                 .help("build image from this path")
+                 .help("name of index")
                  .takes_value(true)
                  .index(1)
                 )
-            .arg(Arg::with_name("target")
-                 .help("file path to write .tcxz")
-                 .default_value("out.tcxz")
-                 .takes_value(true)
-                 .index(2)
-                )
             )
         .subcommand(
-            SubCommand::with_name("push")
+            SubCommand::with_name("store")
             .about("write image into content store")
             .arg(Arg::with_name("root")
                  .required(true)
@@ -63,21 +58,11 @@ fn main() {
                  .takes_value(true)
                  .index(1)
                 )
-            .arg(Arg::with_name("target")
+            .arg(Arg::with_name("name")
                  .required(true)
-                 .help("url to content store and index name in the form scheme://path/index-name")
+                 .help("name of index")
                  .takes_value(true)
                  .index(2)
-                )
-            )
-        .subcommand(
-            SubCommand::with_name("store-init")
-            .about("initialize a store")
-            .arg(Arg::with_name("target")
-                 .required(true)
-                 .help("path to init as store")
-                 .takes_value(true)
-                 .index(1)
                 )
             )
         .subcommand(
@@ -99,36 +84,26 @@ fn main() {
         .get_matches();
 
 
+    let key = "KORHAL_STORE";
+    let content_store_path = match env::var(key) {
+        Ok(val) => {
+            println!("{}: {:?}", key, val);
+            val
+        },
+        Err(e) => {
+            println!("{}: {}", key, e);
+            ::std::process::exit(1);
+        },
+    };
 
     match matches.subcommand() {
-        ("store-init", Some(submatches)) =>{
-            let target_url = Url::parse(submatches.value_of("target").unwrap()).unwrap();
+        ("store", Some(submatches)) =>{
 
-            match target_url.scheme() {
-                "" | "file" => {},
-                _ => panic!(format!("{} is not a supported store scheme", target_url.scheme())),
-            }
-            let target_path = Path::new(target_url.path());
-
-            create_dir_all(&target_path.join("content")).unwrap();
-        },
-        ("push", Some(submatches)) =>{
             let root_path  = submatches.value_of("root").unwrap();
-            let target_url = Url::parse(submatches.value_of("target").unwrap()).unwrap();
-
-            match target_url.scheme() {
-                "" | "file" => {},
-                _ => panic!(format!("{} is not a supported store scheme", target_url.scheme())),
-            }
-
-            let target_path = Path::new(target_url.path());
-            let store_path = target_path.parent().unwrap();
-
+            let name       = submatches.value_of("name").unwrap();
+            let store_path = Path::new(&content_store_path);
             let bsp = store_path.join("content");
-            if !bsp.exists() {
-                println!("{:?} doesn't look like a content store. maybe you want to run store init?", target_path);
-                std::process::exit(10);
-            }
+            create_dir_all(&bsp);
             let mut bs = blockstore::new(bsp.to_str().unwrap().to_owned());
 
             let mut hi = index::from_host(OsString::from(root_path));
@@ -141,25 +116,21 @@ fn main() {
                 }
             }
 
-            hi.save_to_file(target_path);
+            hi.save_to_file(&store_path.join(name));
             println!("input stored into index {} with name {:?}",
                      hi.c.as_ref().unwrap().first().unwrap().h.to_hex(),
-                     target_path.file_name().unwrap()
+                     name
                      )
         },
         ("mount", Some(submatches)) =>{
             let source_url  = Url::parse(submatches.value_of("source").unwrap()).unwrap();
             let target_path = submatches.value_of("target").unwrap();
 
-
             let source_path = Path::new(source_url.path());
             let store_path = source_path.parent().unwrap();
 
             let bsp = store_path.join("content");
-            if !bsp.exists() {
-                println!("{:?} doesn't look like a content store. maybe you want to run store init?", target_path);
-                std::process::exit(10);
-            }
+            create_dir_all(&bsp);
             let mut hi = index::Index::load_from_file(source_path);
             let bs = blockstore::new(bsp.to_str().unwrap().to_owned());
             while let Some(_) = hi.c.as_ref() {
@@ -172,6 +143,10 @@ fn main() {
             let fuse_args: Vec<&OsStr> = vec![&OsStr::new("-o"), &OsStr::new("auto_unmount")];
             fuse::mount(fs, &target_path, &fuse_args).unwrap();
         }
+        ("rm", Some(submatches)) =>{
+            let name = submatches.value_of("name").unwrap();
+
+        },
         _ => unreachable!()
     }
 
