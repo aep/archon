@@ -68,9 +68,9 @@ fn main() {
         .subcommand(
             SubCommand::with_name("mount")
             .about("fuse mount image at a given destination")
-            .arg(Arg::with_name("source")
+            .arg(Arg::with_name("name")
                  .required(true)
-                 .help("url to content store and index name in the form scheme://path/index-name")
+                 .help("name of index")
                  .takes_value(true)
                  .index(1)
                 )
@@ -103,6 +103,7 @@ fn main() {
             let name       = submatches.value_of("name").unwrap();
             let store_path = Path::new(&content_store_path);
             let bsp = store_path.join("content");
+
             create_dir_all(&bsp);
             let mut bs = blockstore::new(bsp.to_str().unwrap().to_owned());
 
@@ -123,21 +124,18 @@ fn main() {
                      )
         },
         ("mount", Some(submatches)) =>{
-            let source_url  = Url::parse(submatches.value_of("source").unwrap()).unwrap();
+            let name        = submatches.value_of("name").unwrap();
             let target_path = submatches.value_of("target").unwrap();
-
-            let source_path = Path::new(source_url.path());
-            let store_path = source_path.parent().unwrap();
-
+            let store_path  = Path::new(&content_store_path);
             let bsp = store_path.join("content");
-            create_dir_all(&bsp);
-            let mut hi = index::Index::load_from_file(source_path);
+
+            let mut hi = index::Index::load_from_file(&store_path.join(name));
             let bs = blockstore::new(bsp.to_str().unwrap().to_owned());
             while let Some(_) = hi.c.as_ref() {
                 hi = hi.load_index(&bs);
             }
 
-            println!("mounting index {:?} with {} inodes to {}", source_path.file_name().unwrap(), hi.i.len(), target_path);
+            println!("mounting index {:?} with {} inodes to {}", name, hi.i.len(), target_path);
 
             let fs = fs::Fuse::new(&hi, &bs);
             let fuse_args: Vec<&OsStr> = vec![&OsStr::new("-o"), &OsStr::new("auto_unmount")];
