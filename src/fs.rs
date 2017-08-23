@@ -16,19 +16,19 @@ const CREATE_TIME: Timespec = Timespec { sec: 1381237736, nsec: 0 };    // 2013-
 
 fn entry_to_file_attr(entry: &Inode) -> FileAttr{
     FileAttr {
-        ino: entry.i + 1,
-        size: entry.s,
-        blocks: entry.s * 512,
-        atime: CREATE_TIME,
-        mtime: CREATE_TIME,
-        ctime: CREATE_TIME,
+        ino:    entry.inode + 1,
+        size:   entry.size,
+        blocks: entry.size * 512,
+        atime:  CREATE_TIME,
+        mtime:  CREATE_TIME,
+        ctime:  CREATE_TIME,
         crtime: CREATE_TIME,
-        kind: match entry.k {
+        kind: match entry.kind {
             1 => FileType::Directory,
             _ => FileType::RegularFile,
         },
-        perm: entry.a,
-        nlink: match entry.d {
+        perm: entry.access,
+        nlink: match entry.dir {
             Some(ref d) => d.len() + 1,
             _ => 1,
         } as u32,
@@ -60,7 +60,7 @@ impl<'a>  Filesystem for Fuse<'a> {
     fn lookup (&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
 
         let mb = self.index.i.get((parent - 1) as usize)
-            .and_then(|entry| entry.d.as_ref())
+            .and_then(|entry| entry.dir.as_ref())
             .and_then(|d| d.get(&name.to_string_lossy().into_owned()))
             .and_then(|e| self.index.i.get(e.i as usize));
 
@@ -90,7 +90,7 @@ impl<'a>  Filesystem for Fuse<'a> {
         match self.index.i.get((ino - 1) as usize) {
             None => {reply.error(ENOENT);},
             Some(entry) => {
-                let mut fh = entry.i;
+                let mut fh = entry.inode;
                 while self.open_files.contains_key(&fh) {
                     fh += 1;
                 }
@@ -131,7 +131,7 @@ impl<'a>  Filesystem for Fuse<'a> {
 
                 let mut offset = 2;
 
-                match entry.d {
+                match entry.dir {
                     None => reply.ok(),
                     Some(ref dir) => {
                         for (s,d) in dir {
@@ -151,7 +151,7 @@ impl<'a>  Filesystem for Fuse<'a> {
 
 impl Inode {
     pub fn chain<'a>(&'a self, blockstore: &'a BlockStore) -> Chain<'a, Take<Chain<'a, Take<File>>>> {
-        let c = self.c.as_ref().unwrap();
+        let c = self.content.as_ref().unwrap();
         let it = c.iter().map(move |c| {
             println!("reading from block {:?} offset  {} limit {}", c.h, c.o, c.l);
 

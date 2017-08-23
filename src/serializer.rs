@@ -25,7 +25,7 @@ macro_rules! kb_fmt {
 impl Index {
     pub fn store_inodes(&mut self, blockstore: &mut BlockStore) {
 
-        let total_bytes = self.i.iter().fold(0, |acc, ref x| acc + x.s);
+        let total_bytes = self.i.iter().fold(0, |acc, ref x| acc + x.size);
 
         let mut bar = ProgressBar::new(total_bytes);
         bar.set_units(::pbr::Units::Bytes);
@@ -36,8 +36,8 @@ impl Index {
 
         let inodes = self.i.to_vec(); //TODO: only need to do this because borrow bla
 
-        let it = inodes.iter().filter(|i|i.k == 2).map(|i| {
-            (BufReader::new(File::open(&i.host_path).unwrap()), i.i)
+        let it = inodes.iter().filter(|i|i.kind == 2).map(|i| {
+            (BufReader::new(File::open(&i.host_path).unwrap()), i.inode)
         });
 
         let mut ci = Chunker::new(Box::new(it), ::rollsum::Bup::new(), 12);
@@ -56,10 +56,10 @@ impl Index {
                     size:    ibr.file_end - ibr.file_start,
                 });
 
-                if let None = self.i[ibr.i as usize].c {
-                    self.i[ibr.i as usize].c = Some(Vec::new());
+                if let None = self.i[ibr.i as usize].content {
+                    self.i[ibr.i as usize].content = Some(Vec::new());
                 }
-                self.i[ibr.i as usize].c.as_mut().unwrap().push(ContentBlockEntry{
+                self.i[ibr.i as usize].content.as_mut().unwrap().push(ContentBlockEntry{
                     h: c.hash.clone(),
                     o: ibr.block_start as u64,
                     l: (ibr.file_end - ibr.file_start) as u64,

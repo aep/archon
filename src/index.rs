@@ -3,16 +3,16 @@ use std::collections::{HashMap, BTreeMap};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Inode {
-    pub i: u64,     //inode (might later use this as offset into the binary formated index)
-    pub p: u64,     //parent
-    pub s: u64,     //size
-    pub k: u16,     //kind
-    pub a: u16,     //perms
+    pub inode:      u64,
+    pub parent:     u64,
+    pub size:       u64,
+    pub kind:       u16,
+    pub access:     u16,
 
     #[serde(serialize_with = "ordered_map")]
-    pub d: Option<HashMap<String, ContentDirEntry>>, //directory
-    pub h: Option<String>, //file hash
-    pub c: Option<Vec<ContentBlockEntry>>, //content blocks
+    pub dir:     Option<HashMap<String, ContentDirEntry>>, //directory
+    pub hash:    Option<String>, //file hash
+    pub content: Option<Vec<ContentBlockEntry>>, //content blocks
 
     #[serde(skip)]
     pub host_path: ::std::ffi::OsString, // full path. will not be stored
@@ -71,15 +71,15 @@ impl Index {
         };
 
         let entry = Inode{
-            i:  i,
-            p: parent_inode,
-            s: meta.len(),
-            k: kind,
-            a: 0o775,
+            inode:  i,
+            parent: parent_inode,
+            size: meta.len(),
+            kind: kind,
+            access: 0o775,
 
-            d: None,
-            h: None,
-            c: Some(Vec::new()),
+            dir:        None,
+            hash:       None,
+            content:    Some(Vec::new()),
 
             host_path: path.path().into_os_string(),
         };
@@ -110,13 +110,13 @@ impl Index {
         }
 
         // insert the dirmap into the current parent node
-        self.i[parent_inode as usize].d = Some(contentdirmap);
+        self.i[parent_inode as usize].dir = Some(contentdirmap);
 
         // 2. iteration to descend into the subdirs
         for x in inode_start..(inode_start+inode_len) {
             let (kind, inode, path) = {
                 let ref e = self.i[x as usize];
-                (e.k, e.i, e.host_path.clone())
+                (e.kind, e.inode, e.host_path.clone())
             };
             if kind == 1 {
                 self.descend(inode, path);
@@ -133,15 +133,15 @@ pub fn from_host(host: ::std::ffi::OsString) -> Index{
     };
 
     index.i.push(Inode{
-        i: 0,
-        p: 0,
-        s: 0,
-        k: 1,
-        a: 0o775,
+        inode:  0,
+        parent: 0,
+        size:   0,
+        kind:   1,
+        access: 0o775,
 
-        d: None,
-        h: None,
-        c: None,
+        dir: None,
+        hash: None,
+        content: None,
 
         host_path: host.clone(),
     });

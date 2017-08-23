@@ -160,10 +160,3 @@ fn main() {
 }
 
 
-#[test]
-fn snail() {
-    let mut bs = blockstore::new();
-    let mut hi = index::from_host(std::ffi::OsString::from("."));
-    hi.serialize(&mut bs);
-
-}
