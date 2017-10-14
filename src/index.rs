@@ -1,5 +1,7 @@
 use serde::{Serialize, Serializer};
 use std::collections::{HashMap, BTreeMap};
+use std::path::Path;
+use std::fs::metadata;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Inode {
@@ -132,6 +134,7 @@ pub fn from_host(host: ::std::ffi::OsString) -> Index{
         c: None,
     };
 
+
     index.i.push(Inode{
         inode:  0,
         parent: 0,
@@ -145,7 +148,32 @@ pub fn from_host(host: ::std::ffi::OsString) -> Index{
 
         host_path: host.clone(),
     });
-    index.descend(0, host);
+
+    let meta = metadata(host.clone()).unwrap();
+    if meta.is_file() {
+        let mut contentdirmap : HashMap<String, ContentDirEntry> = HashMap::new();
+        contentdirmap.insert(Path::new(host.as_os_str()).file_name().unwrap().to_string_lossy().into_owned(),
+        ContentDirEntry {
+            i: 1,
+            k: 2,
+        });
+        index.i[0].dir = Some(contentdirmap);
+        index.i.push(Inode{
+            inode:  1,
+            parent: 0,
+            size:   meta.len(),
+            kind:   2,
+            access: 0o775,
+
+            dir: None,
+            hash: None,
+            content: None,
+
+            host_path: host.clone(),
+        });
+    } else {
+        index.descend(0, host);
+    }
     index
 }
 
