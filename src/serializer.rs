@@ -5,9 +5,13 @@ use pbr::ProgressBar;
 use readchain::{Take,Chain};
 use serde::{Serialize, Deserialize};
 use std::ffi::OsString;
-use std::fs::File;
 use std::io::{Stdout, Seek, SeekFrom, BufReader};
 use std::path::Path;
+use std::fs::File;
+
+use elfkit;
+use sha2::{Sha256, Digest};
+use std::io::Read;
 
 macro_rules! kb_fmt {
     ($n: ident) => {{
@@ -34,13 +38,84 @@ impl Index {
         let mut new_blocks = 0;
         let mut total_blocks = 0;
 
-        let inodes = self.i.to_vec(); //TODO: only need to do this because borrow bla
+
+        let mut inodes = self.i.to_vec();
+
+        // detect special files
+        for i in &mut inodes {
+            if i.kind != 2 {
+                continue;
+            }
+            let mut host_file  = File::open(&i.host_path).unwrap();
+            let cuts = match elfkit::Elf::from_reader(&mut host_file) {
+                Err(_) => None,
+                Ok(mut elf) => {
+                    let mut r = None;
+                    for sec in elf.sections.drain(..) {
+                        if sec.header.shtype == elfkit::types::SectionType(0x6fffff01) {
+                            let mut rr = Vec::new();
+                            let mut io = &sec.content.into_raw().unwrap()[..];
+                            while let Ok(o) = elf_read_u32!(&elf.header, io) {
+                                rr.push(o as usize);
+                            }
+                            r = Some(rr);
+                        }
+                    }
+                    r
+                }
+            };
+            match cuts {
+                None => {},
+                Some(mut cuts) => {
+                    i.kind = 3;
+                    let mut at = 0;
+                    cuts.push(host_file.metadata().unwrap().len() as usize);
+                    cuts.sort_unstable();
+                    host_file.seek(SeekFrom::Start(0));
+                    for cut in cuts {
+                        let mut buf = vec![0;cut - at];
+                        host_file.read_exact(&mut buf).unwrap();
+                        let hash = Sha256::digest(&buf).as_slice().to_vec();
+                        if blockstore.insert(hash.clone(), Block {
+                            shards: vec![BlockShard{
+                                file:    i.host_path.clone(),
+                                offset:  at,
+                                size:    buf.len(),
+                            }],
+                            size: buf.len(),
+                        }) {
+                            new_blocks +=1;
+                            new_bytes  += buf.len();
+                        }
+                        total_blocks += 1;
+                        bar.add(buf.len() as u64);
+
+                        if let None = self.i[i.inode as usize].content {
+                            self.i[i.inode as usize].content = Some(Vec::new());
+                        }
+                        self.i[i.inode as usize].content.as_mut().unwrap().push(ContentBlockEntry{
+                            h: hash,
+                            o: 0,
+                            l: buf.len() as u64,
+                        });
+
+                        at = cut;
+                    }
+                    let mut buf = Vec::new();
+                    assert!(host_file.read_to_end(&mut buf).unwrap() == 0);
+
+
+                }
+            }
+        }
+
+
 
         let it = inodes.iter().filter(|i|i.kind == 2).map(|i| {
             (BufReader::new(File::open(&i.host_path).unwrap()), i.inode)
         });
 
-        let mut ci = Chunker::new(Box::new(it), ::rollsum::Bup::new(), 12);
+        let mut ci = Chunker::new(Box::new(it), ::rollsum::Bup::new(), 9);
         while let Some(c) = ci.next() {
             bar.add((c.len) as u64);
 

@@ -86,6 +86,9 @@ impl Index {
             host_path: path.path().into_os_string(),
         };
 
+
+
+
         self.i.push(entry);
 
         (

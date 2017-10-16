@@ -8,12 +8,13 @@ extern crate pbr;
 extern crate rmp_serde as rmps;
 extern crate rollsum;
 extern crate serde;
-#[macro_use]
-extern crate serde_derive;
+#[macro_use] extern crate serde_derive;
 extern crate sha2;
 extern crate tempfile;
 extern crate time;
 extern crate url;
+#[macro_use] extern crate elfkit;
+extern crate byteorder;
 
 mod blockstore;
 mod chunker;
@@ -30,6 +31,7 @@ use std::ffi::OsString;
 use std::fs::{create_dir_all};
 use std::path::Path;
 use url::{Url};
+use elfkit::types;
 
 fn main() {
 

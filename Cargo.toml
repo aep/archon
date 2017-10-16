@@ -22,3 +22,6 @@ url = "1.5"
 generic-array = "0.8"
 hex = "0.2"
 tempfile = "2.1"
+elfkit = "0.0.4"
+byteorder = "1"
+
