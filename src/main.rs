@@ -86,7 +86,7 @@ fn main() {
         .get_matches();
 
 
-    let key = "KORHAL_STORE";
+    let key = "ARCHON_STORE";
     let content_store_path = match env::var(key) {
         Ok(val) => {
             println!("{}: {:?}", key, val);
